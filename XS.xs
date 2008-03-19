@@ -10,6 +10,14 @@
 #include <ctype.h>
 #include <string.h>
 
+#ifndef PERL_UNUSED_VAR
+#define PERL_UNUSED_VAR(var) if (0) var = var
+#endif
+
+#if LIBXML_VERSION < 20622
+#define XML_PARSE_COMPACT 0
+#endif
+
 /* このモジュールの至る所で sv_2mortal している理由は、エラー処理を
  * croak に任せている為。定命でなければエラー時にメモリリークが起こる。
  */
@@ -67,9 +75,7 @@ static const xmlChar* intern_string(
     parser_context_t* this, const xmlChar** field, const xmlChar* str);
 
 /* エラーハンドラ */
-static void xml_error_handler(
-    void* arg, const char* msg,
-    xmlParserSeverities severity, xmlTextReaderLocatorPtr locator);
+static void xml_error_handler(void* arg, xmlErrorPtr error);
 
 /* ノード移動 */
 static void go_next_node(parser_context_t* this);
@@ -86,7 +92,9 @@ static void expect_int_value(const xmlChar* str);
 static void expect_boolean_value(const xmlChar* str);
 
 /* 試験 */
+/*
 static int is_name_equal_to(parser_context_t* this, const xmlChar* str);
+*/
 
 /* perl オブジェクト生成 */
 static SV* wrap_simple_type(const char* class, const xmlChar* str);
@@ -114,6 +122,9 @@ static void init_module() {
 
     eval_pv("use RPC::XML     ();", TRUE);
     eval_pv("use MIME::Base64 ();", TRUE);
+
+    /* Reader のコンテクスト外でエラーが起きた時に呼ばれる。 */
+    xmlSetStructuredErrorFunc(NULL, xml_error_handler);
 }
 
 static const xmlChar* intern_string(
@@ -123,24 +134,37 @@ static const xmlChar* intern_string(
     return *field;
 }
 
-static void xml_error_handler(
-    void* arg, const char* msg,
-    xmlParserSeverities severity, xmlTextReaderLocatorPtr locator) {
+static void xml_error_handler(void* arg, xmlErrorPtr error) {
+    switch (error->level) {
+    case XML_ERR_NONE:
+        /* no error? */
+        break;
 
-    switch (severity) {
-    case XML_PARSER_SEVERITY_VALIDITY_WARNING:
-    case XML_PARSER_SEVERITY_WARNING:
+    case XML_ERR_WARNING:
         warn(
             "XML parser warning: line %d: %s",
-            xmlTextReaderLocatorLineNumber(locator),
-            msg);
+            error->line,
+            error->message);
         break;
+
+    case XML_ERR_ERROR:
+        croak(
+            "XML parser error: line %d: %s",
+            error->line,
+            error->message);
+        break;
+
+    case XML_ERR_FATAL:
+        croak(
+            "XML parser fatal error: line %d: %s",
+            error->line,
+            error->message);
 
     default:
         croak(
-            "XML parser error: line %d: %s",
-            xmlTextReaderLocatorLineNumber(locator),
-            msg);
+            "XML parser unknown error: line %d: %s",
+            error->line,
+            error->message);
     }
 }
 
@@ -271,11 +295,13 @@ static void expect_boolean_value(const xmlChar* str) {
     }
 }
 
+/*
 static int is_name_equal_to(parser_context_t* this, const xmlChar* str) {
     const xmlChar* name = xmlTextReaderConstName(this->reader);
 
     return xmlStrcmp(name, str) == 0 ? TRUE : FALSE;
 }
+*/
 
 static SV* wrap_simple_type(const char* class, const xmlChar* str) {
     /* 常に bless \(my $o = 'xxx') => 'RPC::XML::*' という形になる。
@@ -663,6 +689,7 @@ static SV* parse_value(parser_context_t* this) {
             value = parse_array(this);
         }
         else {
+            value = NULL; /* avoid unused warning. */
             croak_for_unexpected_element(
                 this,
                 "`i4', `int', `boolean', `double', `dateTime.iso8601', "
@@ -885,6 +912,7 @@ static SV* parse_methodResponse(parser_context_t* this) {
             value = parse_fault(this);
         }
         else {
+            value = NULL; /* avoid unused warning. */
             croak_for_unexpected_element(this, "`params' or `fault'");
         }
     }
@@ -923,6 +951,7 @@ static SV* parse_rpc_xml(parser_context_t* this) {
             result = parse_methodResponse(this);
         }
         else {
+            result = NULL; /* avoid unused warning. */
             croak_for_unexpected_element(this, "`methodCall' or `methodResponse'");
         }
     }
@@ -992,6 +1021,12 @@ parse_rpc_xml(SV* src)
     OUTPUT:
         RETVAL
 
+int
+libxml_version(SV* pkg = NULL)
+  CODE:
+    RETVAL = (LIBXML_VERSION);
+  OUTPUT:
+    RETVAL
 
 MODULE = RPC::XML::Parser::XS       PACKAGE = RPC::XML::Parser::XS::Reader
 
@@ -1001,15 +1036,16 @@ new_string_reader(char* class, SV* src)
         parser_context_t* this;
         init_module();
 
+        PERL_UNUSED_VAR(class);
         /* xmlTextReaderPtr を blessed pointer にしなければ croak 時に
          * メモリを自動的に解放させる事が出来ない。
          */
         this = malloc(sizeof(parser_context_t));
-        bzero(this, sizeof(parser_context_t));
 
         if (this == NULL) {
             croak("failed to allocate parser_context_t");
         }
+        bzero(this, sizeof(parser_context_t));
 
         this->reader = xmlReaderForMemory(
             SvPV_nolen(src), /* buffer   */
@@ -1023,10 +1059,11 @@ new_string_reader(char* class, SV* src)
             XML_PARSE_COMPACT);
 
         if (this->reader == NULL) {
+            free(this);
             croak("failed to create XML string reader: %.*s", SvCUR(src), SvPV_nolen(src));
         }
 
-        xmlTextReaderSetErrorHandler(this->reader, xml_error_handler, NULL);
+        xmlTextReaderSetStructuredErrorHandler(this->reader, xml_error_handler, NULL);
 
         RETVAL = this;
 

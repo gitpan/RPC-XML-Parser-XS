@@ -25,7 +25,7 @@ our @EXPORT = qw(
 	parse_rpc_xml
 );
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 require XSLoader;
 XSLoader::load('RPC::XML::Parser::XS', $VERSION);
@@ -123,6 +123,10 @@ See L<http://xmlsoft.org/>.
 =item MIME::Base64
 
 =item RPC::XML
+
+=item Test::Exception
+
+=item Test::More
 
 =back
 
