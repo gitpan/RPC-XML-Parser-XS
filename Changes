@@ -1,6 +1,10 @@
 Revision history for Perl extension RPC::XML::Parser::XS.
 
 -.--  --- --- -- --:--:-- ----
+0.03  Mon Jul 27 16:48:18 2009
+    - Bugfix: string values were incorrectly parsed when they are implicitly
+      typed.
+
 0.02  Mon Mar 17 17:22:17 2008
     - Bugfix: errors occured outside the XML reader context (such as
       "encoder error") weren't properly handled.

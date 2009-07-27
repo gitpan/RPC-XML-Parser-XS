@@ -537,7 +537,7 @@ L<http://search.cpan.org/dist/ExtUtils-MY_Metafile>
 
 =head1 COPYRIGHT & LICENSE
 
-Copyright 2006-2008 YAMASHINA Hio, all rights reserved.
+Copyright 2006-2008 YAMASHINA Hio.
 
 
 This program is free software; you can redistribute it and/or modify it

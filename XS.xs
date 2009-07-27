@@ -657,9 +657,19 @@ static SV* parse_value(parser_context_t* this) {
     SV* value;
 
     expect_element_name(this, INTERN(this, s_value, "value"));
-    go_next_element(this);
+    go_next_node(this);
+    skip_until_2(
+        this,
+        XML_READER_TYPE_TEXT,
+        XML_READER_TYPE_ELEMENT);
 
-    {
+    if (xmlTextReaderNodeType(this->reader) == XML_READER_TYPE_TEXT) {
+        value = sv_2mortal(
+            wrap_simple_type(
+                "RPC::XML::string",
+                xmlTextReaderConstValue(this->reader)));
+    }
+    else {
         const xmlChar* name = xmlTextReaderConstName(this->reader);
 
         if (xmlStrcmp(name, INTERN(this, s_i4 , "i4" )) == 0 ||

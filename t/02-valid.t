@@ -1,4 +1,4 @@
-use Test::More tests => 17;
+use Test::More tests => 18;
 use RPC::XML::Parser::XS;
 
 is_deeply parse_rpc_xml(qq{
@@ -246,3 +246,15 @@ is_deeply parse_rpc_xml(qq{
       RPC::XML::fault->new(3, 'る'),
      ),
   'methodResponse w/ [(3, "る")::fault]';
+
+is_deeply parse_rpc_xml(qq{
+    <methodCall>
+      <methodName>foo.bar</methodName>
+      <params>
+        <param><value>baz</value></param>
+      </params>
+    </methodCall>
+  }), RPC::XML::request->new(
+      'foo.bar',
+      RPC::XML::string->new('baz')),
+  'bare string values are string values';

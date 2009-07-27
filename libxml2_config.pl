@@ -18,6 +18,7 @@ sub libxml2_config {
 
         my $cmd_str = join(' ', @$cmds);
         ${$out_ref} = `$cmd_str`;
+	return 1;
       };
     }
 
