@@ -1,6 +1,10 @@
 Revision history for Perl extension RPC::XML::Parser::XS.
 
 -.--  --- --- -- --:--:-- ----
+0.04  Mon Jul 27 18:57:47 2009
+    - Bugfix: empty string values were incorrectly parsed when they are
+      implicitly typed.
+
 0.03  Mon Jul 27 16:48:18 2009
     - Bugfix: string values were incorrectly parsed when they are implicitly
       typed.

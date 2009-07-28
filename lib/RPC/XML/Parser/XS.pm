@@ -25,7 +25,7 @@ our @EXPORT = qw(
 	parse_rpc_xml
 );
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 require XSLoader;
 XSLoader::load('RPC::XML::Parser::XS', $VERSION);

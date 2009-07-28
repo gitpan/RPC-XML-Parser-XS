@@ -81,6 +81,7 @@ static void xml_error_handler(void* arg, xmlErrorPtr error);
 static void go_next_node(parser_context_t* this);
 static void skip_until(parser_context_t* this, xmlReaderTypes type);
 static int skip_until_2(parser_context_t* this, xmlReaderTypes type1, xmlReaderTypes type2);
+static int skip_until_3(parser_context_t* this, xmlReaderTypes type1, xmlReaderTypes type2, xmlReaderTypes type3);
 static void go_next_element(parser_context_t* this);
 static void go_next_text(parser_context_t* this);
 
@@ -200,6 +201,18 @@ static int skip_until_2(parser_context_t* this, xmlReaderTypes type1, xmlReaderT
         int type = xmlTextReaderNodeType(this->reader);
 
         if (type == type1 || type == type2) {
+            return type;
+        }
+
+        go_next_node(this);
+    }
+}
+
+static int skip_until_3(parser_context_t* this, xmlReaderTypes type1, xmlReaderTypes type2, xmlReaderTypes type3) {
+    while (1) {
+        int type = xmlTextReaderNodeType(this->reader);
+
+        if (type == type1 || type == type2 || type == type3) {
             return type;
         }
 
@@ -654,62 +667,85 @@ static SV* parse_array(parser_context_t* this) {
 }
 
 static SV* parse_value(parser_context_t* this) {
-    SV* value;
+    SV* value = NULL;
 
     expect_element_name(this, INTERN(this, s_value, "value"));
-    go_next_node(this);
-    skip_until_2(
-        this,
-        XML_READER_TYPE_TEXT,
-        XML_READER_TYPE_ELEMENT);
 
-    if (xmlTextReaderNodeType(this->reader) == XML_READER_TYPE_TEXT) {
+    if (!xmlTextReaderIsEmptyElement(this->reader)) {
+        go_next_node(this);
+
+        skip_until_3(
+            this,
+            XML_READER_TYPE_TEXT,
+            XML_READER_TYPE_ELEMENT,
+            XML_READER_TYPE_END_ELEMENT);
+
+        switch (xmlTextReaderNodeType(this->reader)) {
+        case XML_READER_TYPE_TEXT:
+            value = sv_2mortal(
+                wrap_simple_type(
+                    "RPC::XML::string",
+                    xmlTextReaderConstValue(this->reader)));
+            skip_until(this, XML_READER_TYPE_END_ELEMENT);
+            break;
+
+        case XML_READER_TYPE_ELEMENT:
+            do {
+                const xmlChar* name = xmlTextReaderConstName(this->reader);
+
+                if (xmlStrcmp(name, INTERN(this, s_i4 , "i4" )) == 0 ||
+                    xmlStrcmp(name, INTERN(this, s_int, "int")) == 0   ) {
+
+                    value = parse_int(this);
+                }
+                else if (xmlStrcmp(name, INTERN(this, s_boolean, "boolean")) == 0) {
+                    value = parse_boolean(this);
+                }
+                else if (xmlStrcmp(name, INTERN(this, s_string, "string")) == 0) {
+                    value = parse_string(this);
+                }
+                else if (xmlStrcmp(name, INTERN(this, s_double, "double")) == 0) {
+                    value = parse_double(this);
+                }
+                else if (xmlStrcmp(name, INTERN(this, s_dateTime_iso8601, "dateTime.iso8601")) == 0) {
+                    value = parse_dateTime_iso8601(this);
+                }
+                else if (xmlStrcmp(name, INTERN(this, s_base64, "base64")) == 0) {
+                    value = parse_base64(this);
+                }
+                else if (xmlStrcmp(name, INTERN(this, s_struct, "struct")) == 0) {
+                    value = parse_struct(this);
+                }
+                else if (xmlStrcmp(name, INTERN(this, s_array, "array")) == 0) {
+                    value = parse_array(this);
+                }
+                else {
+                    croak_for_unexpected_element(
+                        this,
+                        "`i4', `int', `boolean', `double', `dateTime.iso8601', "
+                        "`struct' or `array'"
+                        );
+                }
+                skip_until(this, XML_READER_TYPE_END_ELEMENT);
+            } while (0);
+            break;
+
+        case XML_READER_TYPE_END_ELEMENT:
+            break;
+
+        default:
+            croak("parse_value: internal error");
+            break;
+        }
+
+        expect_closing_element_name(this, INTERN(this, s_value, "value"));
+    }
+
+    if (value == NULL) {
         value = sv_2mortal(
-            wrap_simple_type(
-                "RPC::XML::string",
-                xmlTextReaderConstValue(this->reader)));
-    }
-    else {
-        const xmlChar* name = xmlTextReaderConstName(this->reader);
-
-        if (xmlStrcmp(name, INTERN(this, s_i4 , "i4" )) == 0 ||
-            xmlStrcmp(name, INTERN(this, s_int, "int")) == 0   ) {
-
-            value = parse_int(this);
-        }
-        else if (xmlStrcmp(name, INTERN(this, s_boolean, "boolean")) == 0) {
-            value = parse_boolean(this);
-        }
-        else if (xmlStrcmp(name, INTERN(this, s_string, "string")) == 0) {
-            value = parse_string(this);
-        }
-        else if (xmlStrcmp(name, INTERN(this, s_double, "double")) == 0) {
-            value = parse_double(this);
-        }
-        else if (xmlStrcmp(name, INTERN(this, s_dateTime_iso8601, "dateTime.iso8601")) == 0) {
-            value = parse_dateTime_iso8601(this);
-        }
-        else if (xmlStrcmp(name, INTERN(this, s_base64, "base64")) == 0) {
-            value = parse_base64(this);
-        }
-        else if (xmlStrcmp(name, INTERN(this, s_struct, "struct")) == 0) {
-            value = parse_struct(this);
-        }
-        else if (xmlStrcmp(name, INTERN(this, s_array, "array")) == 0) {
-            value = parse_array(this);
-        }
-        else {
-            value = NULL; /* avoid unused warning. */
-            croak_for_unexpected_element(
-                this,
-                "`i4', `int', `boolean', `double', `dateTime.iso8601', "
-                "`struct' or `array'"
-                );
-        }
+            wrap_simple_type("RPC::XML::string", BAD_CAST ""));
     }
 
-    skip_until(this, XML_READER_TYPE_END_ELEMENT);
-    expect_closing_element_name(this, INTERN(this, s_value, "value"));
     go_next_node(this);
     return value;
 }

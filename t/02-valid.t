@@ -1,4 +1,4 @@
-use Test::More tests => 18;
+use Test::More tests => 20;
 use RPC::XML::Parser::XS;
 
 is_deeply parse_rpc_xml(qq{
@@ -258,3 +258,27 @@ is_deeply parse_rpc_xml(qq{
       'foo.bar',
       RPC::XML::string->new('baz')),
   'bare string values are string values';
+
+is_deeply parse_rpc_xml(qq{
+    <methodCall>
+      <methodName>foo.bar</methodName>
+      <params>
+        <param><value></value></param>
+      </params>
+    </methodCall>
+  }), RPC::XML::request->new(
+      'foo.bar',
+      RPC::XML::string->new('')),
+  'empty values are string values [1]';
+
+is_deeply parse_rpc_xml(qq{
+    <methodCall>
+      <methodName>foo.bar</methodName>
+      <params>
+        <param><value /></param>
+      </params>
+    </methodCall>
+  }), RPC::XML::request->new(
+      'foo.bar',
+      RPC::XML::string->new('')),
+  'empty values are string values [2]';
